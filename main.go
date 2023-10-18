@@ -1,145 +1,55 @@
 package main
 
+// Эта программа будет являтся простой программой для входа по данным - имя пользователя и пароль, с функцией автоматического кэш хранения правильных значений для быстрого входа.
 import (
 	"fmt"
-	"runtime"
+	"math/rand"
+	cache "pvs/Cache"
+	glowne "pvs/Package2"
 	"sync"
 	"time"
 )
 
-const (
-	INFINITY = -1
-	DEFAULT  = 0
-)
+type Alrandom_local struct {
+	name     string
+	password string
+}
 
 func main() {
-	fmt.Println("Hello Panstwo")
-	cache := New(10*time.Hour, 20*time.Minute)
-	fmt.Println(cache.defaultExpiration)
-	fmt.Println(cache.items)
-	cache.set("foo", "bar", 2*time.Minute)
-	fmt.Println(cache.items)
-	Object, found := cache.Get("foo")
-	if found {
-		fmt.Println("Value is ", Object)
+	wg := &sync.WaitGroup{}
+	for x := 0; x < 100; x++ {
+		wg.Add(1)
+		go idd(wg) /// добавить блокировки и вайт и т.д i dodac go roytine
+
 	}
+	wg.Wait()
+}
+func idd(wg *sync.WaitGroup) {
+	defer wg.Done()
+	names := make([]string, 0)
+	names = append(names, "Alesya", "Vlad", "Nika", "Maxim")
+	haslos := make([]string, 0)
+	haslos = append(haslos, "62291881", "569884", "VDSK56g", "7ft7ghfhr97g") // "6j4jj46i64jih6", "hh6h46hk4", "h6y6yryyr6", "67u6u665u56u", "ujkj7676667", "kj677t7ut7") //количество повторов комманды или комманда, которая будет указывать на действие)
+	nms := names[rand.Intn(len(names))]
+	//fmt.Println(names)
+	hsl := haslos[rand.Intn(len(haslos))]
+	all := glowne.NewAlrandom(nms, hsl)
+	all_local := Alrandom_local{
+		name:     nms,
+		password: hsl,
+	}
+	otv, tof := all.Alrandomstart()
+	if tof == true {
+		fmt.Println(otv)
+		cache.Cac(all_local.name, all_local.password)
+		time.Sleep(time.Second * 1)
+		cache.Cac(all_local.name, "get")
+	}
+	if tof == false {
+		fmt.Println(otv)
+		return
+	}
+
 }
 
-type Item struct {
-	Object     interface{}
-	Expiration int64 ///its a field for save unix time varable, после которого ты не видишь переменную "ключ-значение", тюе время истечения.
-}
-type janitor struct {
-	Interval time.Duration // время, после которого тип janitor придет чистить кэш от файлов
-	stop     chan bool     // переменнаяю которая информирует janitor что очитска кэша больше не требуется
-}
-type cache struct {
-	defaultExpiration time.Duration   //Время жизни кеша по-умолчанию (этот параметр можно будет переопределить для каждого элемента)
-	items             map[string]Item // мара с параметрами ключ - значение
-	mu                sync.RWMutex    //mu - это блокировка. Так как мар не потокообразный Блокировка помогает гарантировать, что к карте не обращаются два разных потока для записи одновременно. sync.RWMutex имеет два разных вида блокировки – Lock() и RLock(). Lock() позволяет одновременно считывать и записывать только одной подпрограмме. RLock() позволяет нескольким подпрограммам одновременно читать, но не записывать.
-	//onEvicted         func(string, interface{}) //вызывается пользователем и действует как обратный вызов при удалении данных, что бы заменить старые данные актуальными
-	janitor *janitor //очищает данные из кэша по истечении заданного времени
-}
-type Cache struct { // эта струткура необходима что бы сослаться на cahe из другого файла или сервера, так как переменные написанные с маленькой буквы- локальные
-	*cache
-}
-
-func New(defaultExpiration time.Duration, cleanUpInterval time.Duration) *Cache {
-	if defaultExpiration == 0 {
-		defaultExpiration = INFINITY
-	}
-	c := &cache{
-		defaultExpiration: defaultExpiration,
-		items:             make(map[string]Item), // инициализация мапы
-	}
-	C := &Cache{c}           //структура кэш с новым кэшем
-	if cleanUpInterval > 0 { // если время интервала времени после которого янитор все удаляет больне 0
-		runJanitor(c, cleanUpInterval)       // новый кэш и время ci
-		runtime.SetFinalizer(C, stopJanitor) //
-	}
-	return C
-}
-
-func (j *janitor) Run(c *cache) { //янитор.кэш передается сюда, т.е янитор и подпись к какоум кэщу он относится
-	ticker := time.NewTicker(j.Interval)
-	for {
-		select {
-		case <-ticker.C:
-			c.DeleteExpired()
-		case <-j.stop:
-			ticker.Stop()
-			return
-		}
-	}
-}
-func stopJanitor(cache *Cache) {
-	cache.janitor.stop <- true
-}
-func runJanitor(c *cache, ci time.Duration) {
-	j := &janitor{
-		Interval: ci,
-		stop:     make(chan bool),
-	}
-	c.janitor = j // заппись янитора для файла cashe
-	go j.Run(c)
-}
-
-func (c *cache) Add(k string, v interface{}, d time.Duration) error {
-	c.mu.Lock()
-	_, found := c.Get(k)
-	if found {
-		c.mu.Unlock()
-		return fmt.Errorf("Item %s already exists", k)
-	}
-	c.set(k, v, d)
-	c.mu.Unlock()
-	return nil
-}
-func (c *cache) set(k string, v interface{}, d time.Duration) {
-	var e int64
-	if d == 0 {
-		d = c.defaultExpiration
-	}
-	if d > 0 {
-		e = time.Now().Add(d).UnixNano()
-	}
-	c.items[k] = Item{
-		Object:     v,
-		Expiration: e,
-	}
-}
-func (c *cache) Get(k string) (interface{}, bool) {
-	c.mu.RLock()
-	item, found := c.items[k]
-	if !found {
-		c.mu.RUnlock()
-		return nil, false
-	}
-	if item.Expiration > 0 {
-		if time.Now().UnixNano() > item.Expiration {
-			c.mu.RUnlock()
-			return nil, false
-		}
-	}
-	c.mu.RUnlock()
-	return item.Object, true
-} // make a switch case program
-
-func (c *cache) DeleteExpired() {
-	//var evictedItems []kiv
-	now := time.Now().UnixNano()
-	c.mu.Lock()
-	for k, v := range c.items {
-		// "Inlining" of expired
-		if v.Expiration > 0 && now > v.Expiration {
-			delete(c.items, k) // удаляем ключ из кэша и значение
-			/*if evicted {
-				evictedItems = append(evictedItems, kiv{k, ov})
-			}*/
-		}
-	}
-	c.mu.Unlock()
-	/*for _, v := range evictedItems {
-		c.onEvicted(v.key, v.value)
-	}*/
-}
+//in := []string{"Vlad", "Nika", "Alesya", "Maxim", "Valera"}
